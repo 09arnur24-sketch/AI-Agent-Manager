@@ -1,10 +1,10 @@
 from __future__ import annotations
 import argparse
+import json
 import os
 from .config import load_config
 from .orchestrator import run_task, render_markdown
-from .provider import create_provider
-
+from .provider import LLMProvider
 
 def main():
     parser = argparse.ArgumentParser(description="AI Agent Manager")
@@ -15,12 +15,12 @@ def main():
     if args.mock:
         os.environ["AAM_MOCK"] = "1"
     config = load_config(args.config)
-    llm = None if config["mock"] else create_provider(config)
-    if not config["mock"] and llm is None:
-        raise RuntimeError("LLM mode requested but no provider is configured")
+    llm = None
+    if not config["mock"]:
+        p = config["provider"]
+        llm = LLMProvider(p["base_url"], p["api_key"], p["model"], int(config["app"].get("request_timeout_seconds", 45)))
     report = run_task(args.task, config, llm)
     print(render_markdown(report))
-
 
 if __name__ == "__main__":
     main()
