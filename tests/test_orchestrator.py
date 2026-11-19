@@ -26,7 +26,26 @@ def test_task_limit_enforced(tmp_path):
     with pytest.raises(ValueError, match="exceeds"):
         run_task("this task is too long", cfg, output_dir=str(tmp_path))
 
-def test_report_marks_advisory():
-    result = run_task("Check a design", config(), output_dir="/tmp/aam-test-report")
+def test_report_marks_advisory(tmp_path):
+    result = run_task("Check a design", config(), output_dir=str(tmp_path))
     markdown = render_markdown(result)
     assert "No repository files were changed" in markdown
+
+def test_llm_mode_requires_provider(tmp_path):
+    cfg = config()
+    cfg["mock"] = False
+    with pytest.raises(RuntimeError, match="no provider"):
+        run_task("Review a plan", cfg, llm=None, output_dir=str(tmp_path))
+
+def test_local_llm_mode_and_model_in_report(tmp_path):
+    class FakeLLM:
+        def complete(self, system_prompt, user_prompt, temperature=0.2):
+            return f"Analysis for: {user_prompt[:30]}"
+
+    cfg = config()
+    cfg["mock"] = False
+    cfg["provider"]["model"] = "qwen2.5:0.5b"
+    result = run_task("Review a plan", cfg, llm=FakeLLM(), output_dir=str(tmp_path))
+    assert result["mode"] == "local-llm"
+    assert result["model"] == "qwen2.5:0.5b"
+    assert all(result["agents"].values())
