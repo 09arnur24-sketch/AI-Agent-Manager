@@ -2,7 +2,8 @@ from pathlib import Path
 import yaml
 import pytest
 from aam.orchestrator import run_task, render_markdown
-from aam.config import DEFAULT_CONFIG
+from aam.config import DEFAULT_CONFIG, load_config
+from aam.provider import MultiProvider, ProviderError
 
 def config():
     data = yaml.safe_load(DEFAULT_CONFIG.read_text(encoding="utf-8"))
@@ -49,3 +50,41 @@ def test_local_llm_mode_and_model_in_report(tmp_path):
     assert result["mode"] == "local-llm"
     assert result["model"] == "qwen2.5:0.5b"
     assert all(result["agents"].values())
+
+def test_multi_provider_falls_back_after_error():
+    class Broken:
+        def complete(self, *args, **kwargs):
+            raise ProviderError("HTTP 429")
+    class Working:
+        def complete(self, *args, **kwargs):
+            return "real response"
+    client = MultiProvider([("first", Broken()), ("second", Working())])
+    assert client.complete("system", "task") == "real response"
+    assert client.used == ["second"]
+
+def test_multi_provider_fails_when_all_providers_fail():
+    class Broken:
+        def complete(self, *args, **kwargs):
+            raise ProviderError("HTTP 503")
+    client = MultiProvider([("one", Broken()), ("two", Broken())])
+    with pytest.raises(ProviderError, match="All configured providers failed"):
+        client.complete("system", "task")
+
+def test_load_config_enables_only_providers_with_secrets(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-cf")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "account")
+    monkeypatch.delenv("AAM_MOCK", raising=False)
+    cfg = load_config()
+    assert [p["name"] for p in cfg["providers"]] == ["groq", "cloudflare"]
+    assert cfg["mock"] is False
+    assert cfg["runtime_mode"] == "multi-provider"
+
+def test_load_config_uses_mock_when_no_secrets(monkeypatch):
+    for key in ("GROQ_API_KEY", "OPENROUTER_API_KEY", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "AAM_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv("AAM_MOCK", raising=False)
+    cfg = load_config()
+    assert cfg["providers"] == []
+    assert cfg["mock"] is True
