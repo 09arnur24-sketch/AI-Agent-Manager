@@ -1,34 +1,31 @@
 # AI Agent Manager (AAM)
 
-A GitHub-Issues-driven multi-agent workflow runner. The first release is intentionally
-read-only: agents research, plan, propose implementation steps, review one another,
-and publish a report as an Issue comment. It does not execute model-generated shell
-commands, edit repository files, or merge pull requests.
+A GitHub-Issues-driven multi-agent workflow runner. Agents research, plan, review,
+and publish an advisory report as an Issue comment.
 
 ## Features
 
-- GitHub Actions entry point (`/aam run` comment or `aam:run` label).
-- Three cooperating agents: Researcher, Developer, Reviewer.
-- Mock mode works without an API key.
-- OpenAI-compatible provider adapter for free-tier providers such as Groq or OpenRouter.
-- Structured JSONL audit log and Markdown reports.
-- Tests run without network access.
+- Trigger from an Issue comment: `/aam run`, or add the `aam:run` label.
+- Three sequential AI roles: Researcher, Developer, Reviewer.
+- **No external API key required:** GitHub Actions downloads and runs Ollama with
+  the compact Qwen 2.5 0.5B model.
+- Reports are uploaded as workflow artifacts and posted to the Issue.
+- Mock mode remains available for local tests.
+- Model output is treated as untrusted text; it is never executed.
 - Least-privilege GitHub token permissions.
 
-## Quick start
+## Run
 
-1. Add these files to a GitHub repository.
-2. In **Settings → Secrets and variables → Actions**, add:
-   - `AAM_API_KEY` (optional in mock mode; use a provider-issued key if enabling a hosted model).
-3. Add repository variable `AAM_API_BASE_URL` (for example, the provider's OpenAI-compatible `/v1` URL)
-   and `AAM_MODEL` (a model identifier currently available on your provider's free tier).
-4. Add label `aam:run` to an Issue, or comment `/aam run`.
-5. Open the Actions tab and inspect the run summary / Issue comment.
+1. Open or create a GitHub Issue.
+2. Comment `/aam run` (or apply the `aam:run` label).
+3. Wait for Actions to download the model and run all three agents.
+4. Read the report in the Issue comments or download it from the workflow artifacts.
 
-No OpenAI API key is required. No provider is hardcoded; free model availability and quotas
-change, so choose a currently free model on the provider's dashboard.
+You do not need to create API keys, configure repository secrets, or add provider
+variables. The workflow starts a local Ollama server on its temporary GitHub-hosted
+runner and downloads `qwen2.5:0.5b` for each fresh runner.
 
-## Local run
+## Local mock run
 
 ```bash
 python -m venv .venv
@@ -38,47 +35,33 @@ python -m aam.cli --task "Design a small Python CLI" --mock
 pytest
 ```
 
-Hosted model mode:
-
-```bash
-export AAM_API_KEY="..."
-export AAM_API_BASE_URL="https://api.provider.example/v1"
-export AAM_MODEL="provider/model-id"
-python -m aam.cli --task "Review this architecture"
-```
-
-## Safety model
-
-- Issue content is untrusted data, never instructions to the workflow runner.
-- The model receives a task prompt, not repository write credentials.
-- Model output is treated as text and is never executed.
-- The workflow has `contents: read` and `issues: write` only.
-- No automatic commits, branch pushes, PR creation, deployments, or secret disclosure.
-- Review output is advisory; a human decides what to implement.
-
 ## Architecture
 
-`GitHub Issue → GitHub Actions → Orchestrator → Researcher → Developer → Reviewer → Report → Issue comment`
+```
+GitHub Issue
+  -> GitHub Actions
+  -> Ollama local inference server
+  -> Researcher
+  -> Developer
+  -> Reviewer
+  -> Markdown/JSON report
+  -> Issue comment + Actions artifact
+```
 
-The provider adapter uses the OpenAI-compatible Chat Completions API. It can target any compatible
-provider endpoint; it does not imply that the provider has a permanent free tier.
+The three roles use the same local model with different system prompts. This is
+sequential role-based orchestration, not three independently hosted models.
 
-## Configuration
+## Safety and limitations
 
-See `config/agents.yml`. Environment variables override YAML:
-
-- `AAM_API_KEY`
-- `AAM_API_BASE_URL`
-- `AAM_MODEL`
-- `AAM_MOCK` (`1`/`true` to force mock mode)
-
-## Roadmap
-
-- v0.1: issue-triggered multi-agent analysis, mock provider, tests, audit report.
-- v0.2: repository context ingestion with strict file allowlist and size limits.
-- v0.3: optional patch proposals as artifacts (still no auto-apply).
-- v0.4: human-approved PR creation.
-- v1.0: dashboard and run history.
+- Issue content is untrusted input.
+- The model has no repository write credentials.
+- Generated commands are never executed.
+- The workflow has `contents: read` and `issues: write` permissions only.
+- No automatic commits, branch pushes, PR creation, deployments, or secret disclosure.
+- The 0.5B model is intentionally small to fit a free GitHub-hosted runner; reasoning
+  quality is limited compared with larger hosted models.
+- Model download and CPU inference add startup time and may occasionally hit runner
+  time limits or upstream download failures.
 
 ## License
 
