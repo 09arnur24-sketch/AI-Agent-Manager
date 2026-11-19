@@ -28,7 +28,7 @@ jobs:
       (github.event_name == 'issue_comment' && github.event.issue.pull_request == null &&
        github.event.comment.body == '/aam run')
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,9 +37,27 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: pip install -r requirements.txt
-      - name: Run agents
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+      - name: Start local model server
+        run: |
+          ollama serve > /tmp/ollama.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then
+              echo "Ollama is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/ollama.log
+          echo "Ollama failed to start" >&2
+          exit 1
+      - name: Download compact local model
+        run: ollama pull qwen2.5:0.5b
+      - name: Run real AI agents
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             python -m aam.cli --task "$AAM_DISPATCH_TASK"
@@ -51,10 +69,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          AAM_API_KEY: ${{ secrets.AAM_API_KEY }}
-          AAM_API_BASE_URL: ${{ vars.AAM_API_BASE_URL }}
-          AAM_MODEL: ${{ vars.AAM_MODEL }}
-          AAM_MOCK: ${{ vars.AAM_MOCK }}
+          AAM_API_KEY: ollama
+          AAM_API_BASE_URL: http://127.0.0.1:11434/v1
+          AAM_MODEL: qwen2.5:0.5b
+          AAM_MOCK: "0"
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,6 +81,9 @@ jobs:
           path: reports/
           if-no-files-found: ignore
           retention-days: 14
+      - name: Show Ollama logs on failure
+        if: failure()
+        run: cat /tmp/ollama.log || true
 
   tests:
     if: github.event_name == 'workflow_dispatch'
