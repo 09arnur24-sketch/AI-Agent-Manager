@@ -14,6 +14,8 @@ def main():
     if args.mock:
         os.environ["AAM_MOCK"] = "1"
     config = load_config(args.config)
+    if config["mock"] and os.getenv("AAM_REQUIRE_PROVIDER") == "1":
+        raise RuntimeError("No hosted AI provider configured; refusing to run in mock mode.")
     llm = None if config["mock"] else build_provider(config)
     report = run_task(args.task, config, llm)
     print(render_markdown(report))
