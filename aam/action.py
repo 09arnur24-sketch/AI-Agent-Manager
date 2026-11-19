@@ -24,7 +24,9 @@ def main():
         return
     task = f"Issue #{issue.get('number')}: {(issue.get('title') or 'Untitled issue').strip()}\n\n{(issue.get('body') or '').strip()}"
     config = load_config()
-    llm = None if config["mock"] else build_provider(config)
+    if config["mock"]:
+        raise RuntimeError("No hosted AI provider configured. Add at least one provider secret; mock mode is disabled for Issue runs.")
+    llm = build_provider(config)
     report = run_task(task, config, llm)
     post_issue_comment(repo, int(issue["number"]), render_markdown(report))
 
