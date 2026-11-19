@@ -1,0 +1,76 @@
+name: AI Agent Manager
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Task for the agents
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: aam-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  run-agents:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && contains(github.event.label.name, 'aam:run')) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request == null &&
+       github.event.comment.body == '/aam run')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run agents
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python -m aam.cli --task "$AAM_DISPATCH_TASK"
+          else
+            python -m aam.action
+          fi
+        env:
+          AAM_DISPATCH_TASK: ${{ inputs.task }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          AAM_API_KEY: ${{ secrets.AAM_API_KEY }}
+          AAM_API_BASE_URL: ${{ vars.AAM_API_BASE_URL }}
+          AAM_MODEL: ${{ vars.AAM_MODEL }}
+          AAM_MOCK: ${{ vars.AAM_MOCK }}
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aam-reports-${{ github.run_id }}
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  tests:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: pytest -q
