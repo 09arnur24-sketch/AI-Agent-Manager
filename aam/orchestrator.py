@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from .agents import build_agents
 
-
 def _safe_task(task: str, max_chars: int) -> str:
     task = task.strip()
     if not task:
@@ -12,7 +11,6 @@ def _safe_task(task: str, max_chars: int) -> str:
     if len(task) > max_chars:
         raise ValueError(f"Task exceeds configured limit ({max_chars} characters)")
     return task
-
 
 def run_task(task: str, config: dict, llm=None, output_dir: str = "reports") -> dict:
     task = _safe_task(task, int(config.get("app", {}).get("max_task_chars", 12000)))
@@ -44,25 +42,11 @@ def run_task(task: str, config: dict, llm=None, output_dir: str = "reports") -> 
         raise RuntimeError("One or more AI agents returned an empty response")
 
     now = datetime.now(timezone.utc).isoformat()
-    is_multi = hasattr(llm, "providers") and len(getattr(llm, "providers", [])) > 1
-    provider_name = getattr(llm, "name", None) if not mock else None
-    if is_multi:
-        mode = "multi-provider"
-    elif provider_name == "ollama":
-        mode = "local-llm"
-    else:
-        mode = "hosted-llm" if not mock else "mock"
-    model = getattr(llm, "model", None) if not mock else None
-    if is_multi:
-        model = getattr(llm, "models", {})
-    used = list(dict.fromkeys(getattr(llm, "used", []))) if not mock else []
     report = {
         "task": task,
         "created_at": now,
-        "mode": mode,
-        "model": model,
-        "provider": provider_name or ("multi" if is_multi else None),
-        "providers_used": used,
+        "mode": "mock" if mock else "local-llm",
+        "model": config.get("provider", {}).get("model") if not mock else None,
         "agents": {"researcher": research, "developer": plan, "reviewer": review},
     }
     out = Path(output_dir)
@@ -70,15 +54,9 @@ def run_task(task: str, config: dict, llm=None, output_dir: str = "reports") -> 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     (out / f"report-{stamp}.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     (out / f"report-{stamp}.md").write_text(render_markdown(report), encoding="utf-8")
-    with (out / "audit.jsonl").open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps({
-            "timestamp": now,
-            "event": "task_completed",
-            "mode": report["mode"],
-            "providers_used": used,
-        }, ensure_ascii=False) + "\n")
+    with (out / "audit.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"timestamp": now, "event": "task_completed", "mode": report["mode"]}, ensure_ascii=False) + "\n")
     return report
-
 
 def render_markdown(report: dict) -> str:
     parts = [
@@ -87,11 +65,7 @@ def render_markdown(report: dict) -> str:
         f"- Mode: **{report['mode']}**",
     ]
     if report.get("model"):
-        parts.append(f"- Model: `{json.dumps(report['model'], ensure_ascii=False) if isinstance(report['model'], dict) else report['model']}`")
-    if report.get("provider"):
-        parts.append(f"- Provider: `{report['provider']}`")
-    if report.get("providers_used"):
-        parts.append(f"- Providers used: {', '.join(report['providers_used'])}")
+        parts.append(f"- Model: `{report['model']}`")
     parts.extend(["", "## Task", report["task"]])
     for key, heading in [("researcher", "Researcher"), ("developer", "Developer"), ("reviewer", "Reviewer")]:
         parts.extend(["", f"## {heading}", report["agents"][key]])
