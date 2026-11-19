@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-agent-manager"
+version = "0.1.0"
+description = "GitHub Actions multi-agent task manager"
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.27,<1", "PyYAML>=6.0,<7"]
+
+[project.scripts]
+aam = "aam.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
