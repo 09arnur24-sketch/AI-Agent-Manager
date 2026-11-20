@@ -15,7 +15,7 @@ def load_config(path: str | None = None) -> dict:
     groq = os.getenv("GROQ_API_KEY", "").strip()
     if groq:
         providers.append({"name": "groq", "base_url": "https://api.groq.com/openai/v1",
-            "api_key": groq, "model": os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"), "timeout": timeout})
+            "api_key": groq, "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"), "timeout": timeout})
 
     openrouter = os.getenv("OPENROUTER_API_KEY", "").strip()
     if openrouter:
