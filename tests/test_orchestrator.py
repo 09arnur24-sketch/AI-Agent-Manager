@@ -78,6 +78,7 @@ def test_load_config_enables_only_providers_with_secrets(monkeypatch):
     monkeypatch.delenv("AAM_MOCK", raising=False)
     cfg = load_config()
     assert [p["name"] for p in cfg["providers"]] == ["groq", "cloudflare"]
+    assert cfg["providers"][0]["model"] == "openai/gpt-oss-20b"
     assert cfg["mock"] is False
     assert cfg["runtime_mode"] == "multi-provider"
 
