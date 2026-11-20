@@ -6,7 +6,7 @@ A GitHub-Issues-driven multi-agent workflow runner. Researcher, Developer, and R
 
 The workflow tries configured providers in this order and moves to the next provider after a request failure:
 
-1. Groq — OpenAI-compatible endpoint; default model: `llama-3.1-8b-instant`.
+1. Groq — OpenAI-compatible endpoint; default model: `openai/gpt-oss-20b`.
 2. OpenRouter — default model: `openrouter/free`.
 3. Cloudflare Workers AI — default model: `@cf/meta/llama-3.1-8b-instruct`.
 
